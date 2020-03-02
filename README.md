@@ -13,3 +13,5 @@ pytorch bert-ner
  
  f1=0.8009516256938937
  
+## BERT + LSTM + CRF 效果:
+ f1=0.88
