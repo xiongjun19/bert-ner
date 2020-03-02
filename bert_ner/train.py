@@ -17,6 +17,9 @@ from bert_ner.dataset import NerDataset
 from torch.utils.data import dataloader
 
 
+glob_iters = 0
+
+
 class Trainer(object):
     def __init__(self, args):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -25,7 +28,7 @@ class Trainer(object):
 
         if args.model == "crf":
             self.model = model.NetCRF(args.top_rnns, len(NerDataset.VOCAB), self.device, args.finetuning,
-                                      dropput=args.dropout, lin_dim=args.lin_dim)
+                                      dropout=args.dropout, lin_dim=args.lin_dim)
         else:
             self.model = model.Net(args.top_rnns, len(NerDataset.VOCAB), self.device, args.finetuning,
                                    dropout=args.dropout, lin_dim=args.lin_dim)
@@ -100,17 +103,33 @@ class Trainer(object):
             for i, batch in enumerate(iter_):
                 words, x, is_heads, tags, y, seqlens = dataset.trunk_batch(batch)
                 _, y_hat = self.model(x)
-                Y.extend(y.tolist())
-                Y_hat.extend(y_hat.cpu().numpy().tolist() if isinstance(y_hat, torch.Tensor) else y_hat)
+                self._save_to_total(seqlens, Y, y)
+                self._save_to_total(seqlens, Y_hat, y_hat) 
         precision, recall, f1 = self._calc_metric(Y, Y_hat)
         print("precision=%.4f" % precision)
         print("recall=%.4f" % recall)
         print("f1=%.4f" % f1)
         return precision, recall, f1
 
+    def _convert_label(self, y):
+        if isinstance(y, torch.Tensor):
+            y = y.cpu().numpy()
+        if isinstance(y, list):
+            y = np.array(y)
+        return y.tolist()
+
+    def _save_to_total(self, seqlens, total, cur_arrs):
+        cur_arrs = self._convert_label(cur_arrs)
+        for i, cur_arr in enumerate(cur_arrs):
+            len_ = seqlens[i]
+            total.extend(cur_arr[:len_]) 
+
+
     def _calc_metric(self, Y, Y_hat):
         Y = np.array(Y)
         Y_hat = np.array(Y_hat)
+        print(type(Y_hat))
+        print(Y_hat.shape)
         num_proposed = len(Y_hat[Y_hat > 1])
         num_correct = (np.logical_and(Y == Y_hat, Y > 1)).astype(np.int).sum()
         num_gold = len(Y[Y > 1])

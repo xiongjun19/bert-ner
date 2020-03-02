@@ -96,19 +96,20 @@ def prepare_data(f_path, sep="\t"):
 
 
 def _decode_raw(line, sep):
-    line = line.strip()
+    line = line.rstrip()
     if len(line) <= 0:
         return None
     line_arr = line.split("\n")
     char_list = []
     tag_list = []
     for sub_line in line_arr:
-        sub_line = sub_line.strip()
+        sub_line = sub_line
         if len(sub_line) > 0:
             sub_arr = sub_line.split(sep)
             char, tag = sub_arr[0], sub_arr[1]
-            char_list.append(char)
-            tag_list.append(tag)
+            if len(char) > 0 and len(tag) > 0:
+                char_list.append(char)
+                tag_list.append(tag)
     return char_list, tag_list
 
 

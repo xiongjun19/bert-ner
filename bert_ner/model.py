@@ -26,7 +26,7 @@ class Net(nn.Module):
     def forward(self, x, y=None):
         x = x.to(self.device)
         mask = x.eq(0).unsqueeze(-1)
-        if self.finetuning and self.trianing:
+        if self.finetuning and self.training:
             self.bert.train()
             encoded_layers, _ = self.bert(x)
             enc = encoded_layers[-1]
@@ -64,7 +64,8 @@ class NetCRF(Net):
         self.crf = CRF(self.vocab_size, batch_first=True)
 
     def forward(self, x, y=None):
-        feats, _ = super(NetCRF, self).forward(x, y)[0]
+        feats = super(NetCRF, self).forward(x, y)[0]
+        x = x.to(self.device)
         crf_mask = x.ne(0)
         y_hat = self.crf.decode(feats, mask=crf_mask)
         if y is None:
