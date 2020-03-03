@@ -85,6 +85,8 @@ class Trainer(object):
                 i += 1
                 words, x, is_heads, tags, y, seqlens = dataset.trunk_batch(batch)
                 logits, y_hat, loss = self.model(x, y)
+                if torch.cuda.device_count() > 1:
+                   loss = loss.sum()
                 loss.backward()
                 optimizer.step()
                 if i % 10 == 0:

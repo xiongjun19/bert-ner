@@ -66,8 +66,11 @@ class NetCRF(Net):
     def forward(self, x, y=None):
         feats = super(NetCRF, self).forward(x, y)[0]
         x = x.to(self.device)
-        crf_mask = x.ne(0)
+        # crf_mask = x.ne(0)
+        crf_mask = None 
         y_hat = self.crf.decode(feats, mask=crf_mask)
+        y_hat = torch.FloatTensor(y_hat)
+        y_hat = y_hat.to(self.device)
         if y is None:
             return feats, y_hat
         else:
