@@ -14,15 +14,23 @@ from bert_ner import dataset
 from bert_ner.utils import file_helper
 from bert_ner import model
 from bert_ner.dataset import NerDataset
-from torch.utils.data import dataloader
-
+from torch.utils.data import dataloader, RandomSampler, DistributedSampler
 
 glob_iters = 0
 
 
 class Trainer(object):
     def __init__(self, args):
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.local_rank = args.local_rank
+        if args.local_rank == -1:
+            self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            self.n_gpu = torch.cuda.device_count()
+        else:
+            torch.cuda.set_device(args.local_rank)
+            self.device = torch.device("cuda", args.local_rank)
+            torch.distributed.init_process_group(backend='nccl')
+            self.n_gpu = 1
+
         self.tokenizer = BertTokenizer.from_pretrained(os.getenv("BERT_BASE_CHINESE_VOCAB", "bert-base-chinese"),
                                                        do_lower_case=True)
 
@@ -33,8 +41,12 @@ class Trainer(object):
             self.model = model.Net(args.top_rnns, len(NerDataset.VOCAB), self.device, args.finetuning,
                                    dropout=args.dropout, lin_dim=args.lin_dim)
 
-        if torch.cuda.device_count() > 1:
+        if self.n_gpu > 1:
             self.model = nn.DataParallel(self.model)
+        elif args.local_rank != 1:
+            self.model = torch.nn.parallel.DistributedDataParallel(model, devices_ids=[args.local_rank],
+                                                                   output_device=args.local_rank,
+                                                                   find_unused_parameters=True)
 
         self.model.to(self.device)
 
@@ -86,7 +98,7 @@ class Trainer(object):
                 words, x, is_heads, tags, y, seqlens = dataset.trunk_batch(batch)
                 logits, y_hat, loss = self.model(x, y)
                 if torch.cuda.device_count() > 1:
-                   loss = loss.sum()
+                   loss = loss.mean()
                 loss.backward()
                 optimizer.step()
                 if i % 10 == 0:
@@ -126,7 +138,6 @@ class Trainer(object):
             len_ = seqlens[i]
             total.extend(cur_arr[:len_]) 
 
-
     def _calc_metric(self, Y, Y_hat):
         Y = np.array(Y)
         Y_hat = np.array(Y_hat)
@@ -157,8 +168,9 @@ class Trainer(object):
     def _get_loader(self, f_path, batch_size, sep="\t"):
         texts, labels = dataset.prepare_data(f_path, sep)
         ds = NerDataset(self.tokenizer, texts, labels)
+        train_sampler = RandomSampler(ds) if self.local_rank == -1 else DistributedSampler(ds)
         d_loader = dataloader.DataLoader(dataset=ds, batch_size=batch_size,
-                                         shuffle=True, num_workers=4, collate_fn=dataset.pad)
+                                         sampler=train_sampler, num_workers=4, collate_fn=dataset.pad)
         return d_loader
 
     def _write_metric(self, sm_writer, metric_info, epoch, sign="test"):
@@ -184,6 +196,8 @@ def parse_args():
     parser.add_argument("--lin_dim", type=int, default=128)
     parser.add_argument("--log_dir", type=str, default=file_helper.get_data_file("model_logs"),
                         help="path to save the logging of training")
+    parser.add_argument("--local_rank", type=int, default=-1,
+                        help="For distributed training: local_rank")
     args = parser.parse_args()
     return args
 
