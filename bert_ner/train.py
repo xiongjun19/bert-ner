@@ -62,7 +62,13 @@ class Trainer(object):
         sm_writer = SummaryWriter(log_dir)
         train_loader = self._get_loader(train_path, batch_size, sep)
         valid_loader = self._get_loader(valid_path, batch_size, sep)
-        optimizer = Adam(self.model.parameters(), lr=lr)
+        # optimizer = Adam(self.model.parameters(), lr=lr)
+        bert_parameters = list(map(id, self.model.bert.parameters()))
+        rest_parameters = filter(lambda x: id(x) not in bert_parameters, self.model.parameters())
+        optimizer = Adam([
+            {"params": self.model.bert.parameters(),  "lr": 1e-5},
+            {"params": rest_parameters, "lr": lr},
+        ])
         best_f1 = 0.
         lr_decay_count = 0
         for epoch in tqdm(range(epochs)):
