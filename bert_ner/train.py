@@ -63,10 +63,11 @@ class Trainer(object):
         train_loader = self._get_loader(train_path, batch_size, sep)
         valid_loader = self._get_loader(valid_path, batch_size, sep)
         # optimizer = Adam(self.model.parameters(), lr=lr)
-        bert_parameters = list(map(id, self.model.bert.parameters()))
-        rest_parameters = filter(lambda x: id(x) not in bert_parameters, self.model.parameters())
+        tmp_module = self.model if self.n_gpu <= 1 else self.model.module
+        bert_parameters = list(map(id, tmp_module.bert.parameters()))
+        rest_parameters = filter(lambda x: id(x) not in bert_parameters, tmp_module.parameters())
         optimizer = Adam([
-            {"params": self.model.bert.parameters(),  "lr": 1e-5},
+            {"params": tmp_module.bert.parameters(),  "lr": 1e-5},
             {"params": rest_parameters, "lr": lr},
         ])
         best_f1 = 0.
@@ -80,6 +81,7 @@ class Trainer(object):
             print(f"=========train metric at epoch={epoch}=========")
             metric_info = self.evaluate(train_loader)
             self._write_metric(sm_writer, metric_info, epoch, sign="train")
+            cur_lr = lr
             if f1 > best_f1:
                 best_f1 = f1
                 torch.save(self.model.state_dict(), f"{best_model_path}.pt")
@@ -89,8 +91,8 @@ class Trainer(object):
                 if lr_decay_count == lr_decay_pat:
                     for param_group in optimizer.param_groups:
                         param_group["lr"] *= 0.5
-                        cur_lr = param_group["lr"]
                     lr_decay_count = 0
+                    cur_lr = lr * 0.5
                     if cur_lr < 1e-8:
                         print(f"INFO: early stopping at {epoch}")
                         break
