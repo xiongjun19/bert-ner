@@ -49,7 +49,7 @@ class Trainer(object):
         if self.n_gpu > 1:
             self.model = nn.DataParallel(self.model)
         elif args.local_rank != 1:
-            self.model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
+            self.model = torch.nn.parallel.DistributedDataParallel(self.model, device_ids=[args.local_rank],
                                                                    output_device=args.local_rank,
                                                                    find_unused_parameters=True)
 
