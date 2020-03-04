@@ -31,6 +31,9 @@ class Trainer(object):
             torch.distributed.init_process_group(backend='nccl')
             self.n_gpu = 1
 
+        if args.local_rank not in [-1, 0]:
+            torch.distributed.barrier()
+
         self.tokenizer = BertTokenizer.from_pretrained(os.getenv("BERT_BASE_CHINESE_VOCAB", "bert-base-chinese"),
                                                        do_lower_case=True)
 
@@ -40,11 +43,13 @@ class Trainer(object):
         else:
             self.model = model.Net(args.top_rnns, len(NerDataset.VOCAB), self.device, args.finetuning,
                                    dropout=args.dropout, lin_dim=args.lin_dim)
+        if args.local_rank == 0:
+            torch.distributed.barrier()
 
         if self.n_gpu > 1:
             self.model = nn.DataParallel(self.model)
         elif args.local_rank != 1:
-            self.model = torch.nn.parallel.DistributedDataParallel(model, devices_ids=[args.local_rank],
+            self.model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
                                                                    output_device=args.local_rank,
                                                                    find_unused_parameters=True)
 
