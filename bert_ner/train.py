@@ -63,7 +63,7 @@ class Trainer(object):
         train_loader = self._get_loader(train_path, batch_size, sep)
         valid_loader = self._get_loader(valid_path, batch_size, sep)
         # optimizer = Adam(self.model.parameters(), lr=lr)
-        tmp_module = self.model if self.n_gpu <= 1 else self.model.module
+        tmp_module = self.model if self.n_gpu <= 1 and self.local_rank == -1 else self.model.module
         bert_parameters = list(map(id, tmp_module.bert.parameters()))
         rest_parameters = filter(lambda x: id(x) not in bert_parameters, tmp_module.parameters())
         optimizer = Adam([
