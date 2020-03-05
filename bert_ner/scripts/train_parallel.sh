@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5  nohup python -m torch.distributed.launch --nproc_per_node=6 --nnodes=1 --node_rank=0 --master_addr=103.28.213.215 --master_port=9530  ./train.py --trainset ../../ZEN/datasets/custom/train.tsv --validset ../../ZEN/datasets/custom/test.tsv --batch_size 4  --top_rnns --lr 1e-3 --finetuning --dropout 0.5 --grad_accumulation_steps 8   > log3.txt &
