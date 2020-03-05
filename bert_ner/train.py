@@ -46,14 +46,14 @@ class Trainer(object):
         if args.local_rank == 0:
             torch.distributed.barrier()
 
+        self.model.to(self.device)
+
         if self.n_gpu > 1:
             self.model = nn.DataParallel(self.model)
         elif args.local_rank != -1:
             self.model = torch.nn.parallel.DistributedDataParallel(self.model, device_ids=[args.local_rank],
                                                                    output_device=args.local_rank,
                                                                    find_unused_parameters=True)
-
-        self.model.to(self.device)
 
     def train(self, train_path, valid_path, log_dir, model_dir, batch_size=32, sep="\t", epochs=30,
               lr=0.001, lr_decay_pat=3):
