@@ -21,6 +21,7 @@ glob_iters = 0
 
 class Trainer(object):
     def __init__(self, args):
+        self.grad_acum_steps = args.grad_accumulation_steps
         self.local_rank = args.local_rank
         if args.local_rank == -1:
             self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -74,17 +75,18 @@ class Trainer(object):
         lr_decay_count = 0
         for epoch in tqdm(range(epochs)):
             self.train_epoch(train_loader, optimizer, sm_writer)
-            print(f"=========test metric at epoch={epoch}=========")
-            metric_info = self.evaluate(valid_loader)
-            self._write_metric(sm_writer, metric_info, epoch, sign="test")
-            _, _, f1 = metric_info
-            print(f"=========train metric at epoch={epoch}=========")
-            metric_info = self.evaluate(train_loader)
-            self._write_metric(sm_writer, metric_info, epoch, sign="train")
-            cur_lr = lr
+            if self.local_rank in [-1, 0]:
+                print(f"=========test metric at epoch={epoch}=========")
+                metric_info = self.evaluate(valid_loader)
+                self._write_metric(sm_writer, metric_info, epoch, sign="test")
+                _, _, f1 = metric_info
+                print(f"=========train metric at epoch={epoch}=========")
+                metric_info = self.evaluate(train_loader)
+                self._write_metric(sm_writer, metric_info, epoch, sign="train")
             if f1 > best_f1:
                 best_f1 = f1
-                torch.save(self.model.state_dict(), f"{best_model_path}.pt")
+                if self.local_rank in [-1, 0]:
+                    torch.save(self.model.state_dict(), f"{best_model_path}.pt")
                 lr_decay_count = 0
             else:
                 lr_decay_count += 1
@@ -102,22 +104,29 @@ class Trainer(object):
         self.model.train()
         iter_ = iter(d_loader)
         i = 0
+        self.model.zero_grad()
         while True:
-            optimizer.zero_grad()
             try:
                 batch = next(iter_)
-                glob_iters += 1
                 i += 1
                 words, x, is_heads, tags, y, seqlens = dataset.trunk_batch(batch)
                 logits, y_hat, loss = self.model(x, y)
                 if torch.cuda.device_count() > 1:
-                   loss = loss.mean()
+                    loss = loss.mean()
+                if self.grad_acum_steps > 1:
+                    loss /= self.grad_acum_steps
                 loss.backward()
-                optimizer.step()
-                if i % 10 == 0:
-                    print(f"step: {i}, loss: {loss.item()}")
-                    sm_writer.add_scalar('loss/train', loss.item(), glob_iters)
-                    sm_writer.add_scalar('lr', optimizer.param_groups[0]['lr'], glob_iters)
+
+                if i % self.grad_acum_steps == 0:
+                    optimizer.step()
+                    self.model.zero_grad()
+                    glob_iters += 1
+
+                if glob_iters % 10 == 0:
+                    if self.local_rank in [-1, 0]:
+                        print(f"step: {i}, loss: {loss.item()}")
+                        sm_writer.add_scalar('loss/train', loss.item(), glob_iters)
+                        sm_writer.add_scalar('lr', optimizer.param_groups[0]['lr'], glob_iters)
             except StopIteration:
                 break
 
@@ -211,6 +220,8 @@ def parse_args():
                         help="path to save the logging of training")
     parser.add_argument("--local_rank", type=int, default=-1,
                         help="For distributed training: local_rank")
+    parser.add_argument("--grad_accumulation_steps", type=int, default=1,
+                        help="steps for grad accumulation")
     args = parser.parse_args()
     return args
 
