@@ -75,11 +75,11 @@ class Trainer(object):
         lr_decay_count = 0
         for epoch in tqdm(range(epochs)):
             self.train_epoch(train_loader, optimizer, sm_writer)
+            metric_info = self.evaluate(valid_loader)
+            _, _, f1 = metric_info
             if self.local_rank in [-1, 0]:
                 print(f"=========test metric at epoch={epoch}=========")
-                metric_info = self.evaluate(valid_loader)
                 self._write_metric(sm_writer, metric_info, epoch, sign="test")
-                _, _, f1 = metric_info
                 print(f"=========train metric at epoch={epoch}=========")
                 metric_info = self.evaluate(train_loader)
                 self._write_metric(sm_writer, metric_info, epoch, sign="train")
