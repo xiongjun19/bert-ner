@@ -76,9 +76,12 @@ class Trainer(object):
         for epoch in tqdm(range(epochs)):
             self.train_epoch(train_loader, optimizer, sm_writer)
             metric_info = self.evaluate(valid_loader)
-            _, _, f1 = metric_info
+            precision, recall, f1 = metric_info
             if self.local_rank in [-1, 0]:
                 print(f"=========test metric at epoch={epoch}=========")
+                print("precision=%.4f" % precision)
+                print("recall=%.4f" % recall)
+                print("f1=%.4f" % f1)
                 self._write_metric(sm_writer, metric_info, epoch, sign="test")
                 print(f"=========train metric at epoch={epoch}=========")
                 metric_info = self.evaluate(train_loader)
@@ -142,9 +145,9 @@ class Trainer(object):
                 self._save_to_total(seqlens, Y, y)
                 self._save_to_total(seqlens, Y_hat, y_hat) 
         precision, recall, f1 = self._calc_metric(Y, Y_hat)
-        print("precision=%.4f" % precision)
-        print("recall=%.4f" % recall)
-        print("f1=%.4f" % f1)
+        # print("precision=%.4f" % precision)
+        # print("recall=%.4f" % recall)
+        # print("f1=%.4f" % f1)
         return precision, recall, f1
 
     def _convert_label(self, y):
